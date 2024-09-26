@@ -10,13 +10,11 @@ try:
     import customtkinter as tk
     import win32api
     import win32con
+    import json
+    import ctypes
 except ImportError:
-    print("Missing dependencies, Installing.")
     os._exit(1)
     os.system("pip install pillow pynput pystray requests customtkinter pywin32")
-
-
-print("Initialized")
 
 def on_scroll(x, y, dx, dy):
     if enabled and dy != 0 and executor._work_queue.qsize() < 15:
@@ -34,14 +32,13 @@ def create_image():
     
     icon_path = os.path.join(temp_dir, "Icon.ico")
     if not os.path.exists(icon_path):
-        print(f"Downloading Icon")
         url = "https://github.com/FloofyIV/Skipper/blob/main/Icon.ico?raw=true"
         response = requests.get(url)
         if response.status_code == 200:
             with open(icon_path, 'wb') as f:
                 f.write(response.content)
         else:
-            print(f"Failed; {response.status_code}")
+            ctypes.windll.user32.MessageBoxW(0, f"Failed to download icon; HTTP status code: {response.status_code}", "Error", 0x10)
             os._exit(1)
     return Image.open(icon_path)
 
@@ -54,7 +51,7 @@ def qolbinds():
         if win32api.GetAsyncKeyState(win32con.VK_DELETE):
             quit()
         elif win32api.GetAsyncKeyState(win32con.VK_HOME):
-            togglegui()
+            tgui()
         elif win32api.GetAsyncKeyState(win32con.VK_END):
             togglehop()
         time.sleep(0.1)
@@ -63,7 +60,22 @@ def togglehop():
     global enabled
     enabled = not enabled
 
-delay = 0.002
+config_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "Skipper", "config.json")
+
+def rconfig():
+    global delay
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
+            config = json.load(f)
+            delay = config.get('delay', 0.002)
+    else:
+        delay = 0.002
+
+def wconfig():
+    with open(config_path, 'w') as f:
+        json.dump({'delay': delay}, f)
+
+rconfig()
 enabled = True
 guitoggle = False
 gui_thread = None
@@ -75,7 +87,7 @@ def tray():
     icon.menu = pystray.Menu(
         pystray.MenuItem(
             lambda item: "Close GUI" if guitoggle else "Open GUI", 
-            lambda item: togglegui()
+            lambda item: tgui()
         ),
         pystray.MenuItem(
             lambda item: "Disable" if enabled else "Enable", 
@@ -83,7 +95,6 @@ def tray():
         ),
         pystray.MenuItem("Quit", lambda item: quit())
     )
-    print("Minimized - Tray") 
     icon.run()
 
 def udelay():
@@ -93,12 +104,12 @@ def udelay():
     except ValueError:
         return None
 
-def togglegui():
+def tgui():
     global guitoggle, gui_thread, root, delay_entry
     guitoggle = not guitoggle
     if guitoggle:
         if not gui_thread or not gui_thread.is_alive():
-            gui_thread = threading.Thread(target=create_gui)
+            gui_thread = threading.Thread(target=buildgui)
             gui_thread.start()
         else:
             if root:
@@ -108,7 +119,7 @@ def togglegui():
         if root:
             root.withdraw()
 
-def create_gui():
+def buildgui():
     global root, delay_entry
     root = tk.CTk()
     root.title("Skipper")
@@ -128,22 +139,13 @@ def create_gui():
     delay_entry.pack(pady=5)
     delay_entry.insert(0, str(delay))
 
-    tk.CTkButton(root, text="Update", command=udelay, fg_color="#2F2F2F", hover_color="#292929").pack(pady=10)
+    tk.CTkButton(root, text="Update", command=lambda: [udelay(), wconfig()], fg_color="#2F2F2F", hover_color="#292929").pack(pady=10)
 
     root.lift()
     root.attributes('-topmost', True)
     root.after_idle(root.attributes, '-topmost', False)
     root.protocol("WM_DELETE_WINDOW", root.withdraw)
     root.mainloop()
-
-def open_gui():
-    global gui_thread
-    if not gui_thread or not gui_thread.is_alive():
-        gui_thread = threading.Thread(target=create_gui)
-        gui_thread.start()
-    else:
-        if root:
-            root.deiconify()
 
 executor = ThreadPoolExecutor(max_workers=1)
 listener = mouse.Listener(on_scroll=on_scroll)
