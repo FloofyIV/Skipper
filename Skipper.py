@@ -2,7 +2,7 @@ try:
     from PIL import Image
     import threading
     import os
-    from pynput import mouse
+    from pynput import mouse, keyboard
     from concurrent.futures import ThreadPoolExecutor
     import time
     import pystray
@@ -46,16 +46,33 @@ def create_image():
 
 def quit():
     listener.stop()
+    keyboard_listener.stop()
     os._exit(0)
+
+key_pressed = threading.Event()
+
+def on_press(key):
+    if key == keyboard.Key.end and not key_pressed.is_set():
+        key_pressed.set()
+        togglehop()
+    elif key == keyboard.Key.home and not key_pressed.is_set():
+        key_pressed.set()
+        tgui()
+
+def on_release(key):
+    if key == keyboard.Key.end:
+        key_pressed.clear()
+    elif key == keyboard.Key.home:
+        key_pressed.clear()
+
+global keyboard_listener
+keyboard_listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+keyboard_listener.start()
 
 def qolbinds():
     while True:
         if win32api.GetAsyncKeyState(win32con.VK_DELETE):
             quit()
-        elif win32api.GetAsyncKeyState(win32con.VK_HOME):
-            tgui()
-        elif win32api.GetAsyncKeyState(win32con.VK_END):
-            togglehop()
         time.sleep(0.1)
 
 def togglehop():
