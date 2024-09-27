@@ -18,49 +18,6 @@ except ImportError:
     ctypes.windll.user32.MessageBoxW(0, "Downloaded imports. Please re-open Skipper.py", "Skipper Imports", 0x40)
     os.exit(1)
 
-
-def update():
-    try:
-        script_response = requests.get("https://raw.githubusercontent.com/FloofyIV/Skipper/main/Skipper.py")
-        if script_response.status_code == 200:
-            latest_script_content = script_response.content
-            latest_script_hash = hashlib.sha256(latest_script_content).hexdigest()
-        else:
-            latest_script_hash = None
-
-        release_response = requests.get("https://api.github.com/repos/FloofyIV/Skipper/releases/latest")
-        if release_response.status_code == 200:
-            release_data = release_response.json()
-            assets = release_data.get("assets", [])
-            if assets:
-                latest_release_url = assets[0]["browser_download_url"]
-                release_file_response = requests.get(latest_release_url)
-                if release_file_response.status_code == 200:
-                    latest_release_content = release_file_response.content
-                    latest_release_hash = hashlib.sha256(latest_release_content).hexdigest()
-                else:
-                    latest_release_hash = None
-            else:
-                latest_release_hash = None
-        else:
-            latest_release_hash = None
-
-        path = os.path.abspath(__file__)
-        sha256_hash = hashlib.sha256()
-        with open(path, "rb") as f:
-            for byte_block in iter(lambda: f.read(4096), b""):
-                sha256_hash.update(byte_block)
-        hash = sha256_hash.hexdigest()
-
-        if (latest_script_hash and latest_script_hash != hash) or \
-            (latest_release_hash and latest_release_hash != hash):
-            ctypes.windll.user32.MessageBoxW(0, "A new version is available. Please update.", "Skipper Updater", 0x40)
-    except Exception as e:
-        pass
-
-updater = threading.Thread(target=update)
-updater.start()
-
 def on_scroll(x, y, dx, dy):
     if enabled and dy != 0 and executor._work_queue.qsize() < 15:
         executor.submit(hop)
