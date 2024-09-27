@@ -12,9 +12,54 @@ try:
     import win32con
     import json
     import ctypes
+    import hashlib
 except ImportError:
-    os._exit(1)
     os.system("pip install pillow pynput pystray requests customtkinter pywin32")
+    ctypes.windll.user32.MessageBoxW(0, "Downloaded imports. Please re-open Skipper.py", "Skipper Imports", 0x40)
+    os.exit(1)
+
+
+def update():
+    try:
+        script_response = requests.get("https://raw.githubusercontent.com/FloofyIV/Skipper/main/Skipper.py")
+        if script_response.status_code == 200:
+            latest_script_content = script_response.content
+            latest_script_hash = hashlib.sha256(latest_script_content).hexdigest()
+        else:
+            latest_script_hash = None
+
+        release_response = requests.get("https://api.github.com/repos/FloofyIV/Skipper/releases/latest")
+        if release_response.status_code == 200:
+            release_data = release_response.json()
+            assets = release_data.get("assets", [])
+            if assets:
+                latest_release_url = assets[0]["browser_download_url"]
+                release_file_response = requests.get(latest_release_url)
+                if release_file_response.status_code == 200:
+                    latest_release_content = release_file_response.content
+                    latest_release_hash = hashlib.sha256(latest_release_content).hexdigest()
+                else:
+                    latest_release_hash = None
+            else:
+                latest_release_hash = None
+        else:
+            latest_release_hash = None
+
+        path = os.path.abspath(__file__)
+        sha256_hash = hashlib.sha256()
+        with open(path, "rb") as f:
+            for byte_block in iter(lambda: f.read(4096), b""):
+                sha256_hash.update(byte_block)
+        hash = sha256_hash.hexdigest()
+
+        if (latest_script_hash and latest_script_hash != hash) or \
+            (latest_release_hash and latest_release_hash != hash):
+            ctypes.windll.user32.MessageBoxW(0, "A new version is available. Please update.", "Skipper Updater", 0x40)
+    except Exception as e:
+        pass
+
+updater = threading.Thread(target=update)
+updater.start()
 
 def on_scroll(x, y, dx, dy):
     if enabled and dy != 0 and executor._work_queue.qsize() < 15:
@@ -59,6 +104,18 @@ def qolbinds():
 def togglehop():
     global enabled
     enabled = not enabled
+    icon.menu = pystray.Menu(
+        pystray.MenuItem(
+            lambda item: "Close GUI" if guitoggle else "Open GUI", 
+            lambda item: tgui()
+        ),
+        pystray.MenuItem(
+            lambda item: "Disable" if enabled else "Enable", 
+            lambda item: togglehop()
+        ),
+        pystray.MenuItem("Quit", lambda item: quit())
+    )
+    
 
 config_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Temp", "Skipper", "config.json")
 
@@ -75,12 +132,32 @@ def wconfig():
     with open(config_path, 'w') as f:
         json.dump({'delay': delay}, f)
 
+def makefig():
+    with open(config_path, 'w') as f:
+        json.dump({'delay': delay, 'FirstRan': time.strftime('%d-%m-%Y %H:%M:%S', time.localtime()), 'LastRan': time.strftime('%d-%m-%Y %H:%M:%S', time.localtime())                    }, f)
+
 rconfig()
 enabled = True
 guitoggle = False
 gui_thread = None
 
+if not os.path.exists(config_path):
+    makefig()  
+    ctypes.windll.user32.MessageBoxW(0, f"Welcome, Skipper is located in the item tray.\nQuick Binds:\nDelete = Close Skipper\nEnd = Toggle Skipper\nHome = Toggle GUI", "Skipper", 0x40)
+
+if os.path.exists(config_path):
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+else:
+    config = {}
+
+config['LastRan'] = time.strftime('%d-%m-%Y %H:%M:%S', time.localtime())
+
+with open(config_path, 'w') as f:
+    json.dump(config, f)
+
 def tray():
+    global icon
     icon = pystray.Icon("Skipper")
     icon.icon = create_image()
     icon.title = "Skipper"
